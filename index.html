@@ -322,6 +322,7 @@ textarea:focus{border-color:var(--accent);}
 <select id="filterEstado" onchange="renderVehicles()"><option value="">Todos los estados</option><option>ACTIVO</option><option>INACTIVO</option><option>VENDIDO</option><option>EN REPARACION</option></select>
         <select id="filterTipo" onchange="renderVehicles()"><option value="">Todos los tipos</option></select>
         <select id="filterMarca" onchange="renderVehicles()"><option value="">Todas las marcas</option></select>
+        <select id="filterEstadoITV" onchange="renderVehicles()"><option value="">Todos los estados ITV</option></select>
       </div>
 
       <div class="vehicles-grid" id="vehiclesGrid"></div>
@@ -873,12 +874,13 @@ function renderVehicles() {
   const fe = document.getElementById('filterEstado')?.value||'';
   const ft = document.getElementById('filterTipo')?.value||'';
   const fm = document.getElementById('filterMarca')?.value||'';
+  const fi = document.getElementById('filterEstadoITV')?.value||'';
   const grid = document.getElementById('vehiclesGrid');
 
   const filtered = vehicles.filter(v => {
     const mq = !q || ['matricula','empresa','marca','modelo','depto','chasis','motor','padron','registro','poliza']
       .some(k => (v[k]||'').toLowerCase().includes(q));
-    return mq && (!fe||v.estadoVeh===fe) && (!ft||v.tipo===ft) && (!fm||v.marca===fm);
+    return mq && (!fe||v.estadoVeh===fe) && (!ft||v.tipo===ft) && (!fm||v.marca===fm) && (!fi||v.estadoITV===fi);
   });
 
   grid.innerHTML = filtered.length===0
@@ -1025,11 +1027,14 @@ function updateAlerts() {
 function updateDynamicFilters() {
   const selT=document.getElementById('filterTipo');
   const selM=document.getElementById('filterMarca');
-  const curT=selT.value, curM=selM.value;
+  const selI=document.getElementById('filterEstadoITV');
+  const curT=selT.value, curM=selM.value, curI=selI.value;
   const tipos=[...new Set(vehicles.map(v=>v.tipo).filter(Boolean))].sort();
   const marcas=[...new Set(vehicles.map(v=>v.marca).filter(Boolean))].sort();
+  const estadosITV=[...new Set(vehicles.map(v=>v.estadoITV).filter(Boolean))].sort();
   selT.innerHTML='<option value="">Todos los tipos</option>'+tipos.map(t=>`<option ${t===curT?'selected':''}>${t}</option>`).join('');
   selM.innerHTML='<option value="">Todas las marcas</option>'+marcas.map(m=>`<option ${m===curM?'selected':''}>${m}</option>`).join('');
+  selI.innerHTML='<option value="">Todos los estados ITV</option>'+estadosITV.map(e=>`<option ${e===curI?'selected':''}>${e}</option>`).join('');
 }
 
 // ═══════════════════════════════════════════════════════════
