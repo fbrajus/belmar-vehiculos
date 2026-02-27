@@ -666,11 +666,11 @@ const _db = {
 };
 
 // Patch Firestore calls used in main code to modular API
-async function _getDoc(colRef, id)        { return getDoc(doc(db, colRef.id || colRef.path, id)); }
-async function _setDoc(colRef, id, data)  { return setDoc(doc(db, colRef.id || colRef.path, id), data); }
-async function _setDocMerge(colRef, id, data) { return setDoc(doc(db, colRef.id || colRef.path, id), data, {merge:true}); }
+async function _getDoc(colRef, id)        { return getDoc(doc(colRef, id)); }
+async function _setDoc(colRef, id, data)  { return setDoc(doc(colRef, id), data); }
+async function _setDocMerge(colRef, id, data) { return setDoc(doc(colRef, id), data, {merge:true}); }
 async function _addDoc(colRef, data)      { return addDoc(colRef, data); }
-async function _deleteDoc(colRef, id)     { return deleteDoc(doc(db, colRef.id || colRef.path, id)); }
+async function _deleteDoc(colRef, id)     { return deleteDoc(doc(colRef, id)); }
 async function _getDocs(colRef)           { return getDocs(colRef); }
 async function _getDocsOrdered(colRef, field) { return getDocs(query(colRef, orderBy(field))); }
 function _batch() {
@@ -679,10 +679,9 @@ function _batch() {
     set:    (ref, data)  => b.set(ref, data),
     delete: (ref)        => b.delete(ref),
     commit: ()           => b.commit(),
-    _ref:   (colRef, id) => doc(db, colRef.id || colRef.path, id),
   };
 }
-function _docRef(colRef, id) { return doc(db, colRef.id || colRef.path, id); }
+function _docRef(colRef, id) { return doc(colRef, id); }
 
 // Create Firebase Auth user via REST API
 async function _createFirebaseUser(email, password) {
@@ -777,7 +776,7 @@ async function doLogin() {
     const uid  = cred.user.uid;
     await bootstrapAdmin();
     const snap = await _getDoc(usersCol, uid);
-    if (!snap.exists) { await signOut(auth); throw new Error('Perfil no encontrado. Contactá al administrador.'); }
+    if (!snap.exists()) { await signOut(auth); throw new Error('Perfil no encontrado. Contactá al administrador.'); }
     const profile = snap.data();
     if (profile.active === false) { await signOut(auth); throw new Error('Usuario inactivo. Contactá al administrador.'); }
     currentUser = { uid, email: cred.user.email, name: profile.name || email, role: profile.role || 'user', mustChangePass: profile.mustChangePass || false };
@@ -1627,7 +1626,7 @@ document.addEventListener('DOMContentLoaded', function() {
       // Auto-restore session
       try {
         const snap = await _getDoc(usersCol, firebaseUser.uid);
-        if (snap.exists && snap.data().active !== false) {
+        if (snap.exists() && snap.data().active !== false) {
           const profile = snap.data();
           currentUser = { uid: firebaseUser.uid, email: firebaseUser.email, name: profile.name || firebaseUser.email, role: profile.role || 'user', mustChangePass: profile.mustChangePass || false };
           await startApp();
