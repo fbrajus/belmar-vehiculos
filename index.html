@@ -642,8 +642,8 @@ import { getAuth, signInWithEmailAndPassword,
          signOut, onAuthStateChanged,
          EmailAuthProvider,
          reauthenticateWithCredential,
-         updatePassword, createUserWithEmail,
-         initializeAuth }                       from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+         updatePassword, createUserWithEmailAndPassword as _fbCreateUser }
+         from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyB_36_CXD-Wg_2c8htAGPTgWs_-8p9Icmc",
@@ -686,6 +686,7 @@ function _docRef(colRef, id) { return doc(colRef, id); }
 // Create Firebase Auth user via REST API
 async function _createFirebaseUser(email, password) {
   const apiKey = "AIzaSyB_36_CXD-Wg_2c8htAGPTgWs_-8p9Icmc";
+  // Using Firebase Auth SDK directly
   const res = await fetch(
     `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
     { method:'POST', headers:{'Content-Type':'application/json'},
