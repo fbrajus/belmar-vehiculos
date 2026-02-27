@@ -6,6 +6,9 @@
 <title>Belmar — Control de Vencimientos Vehiculares</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <style>
 :root {
   --bg:#0d0f14; --surface:#161a23; --surface2:#1e2330; --border:#2a3045;
@@ -69,6 +72,12 @@ main{max-width:1000px;margin:0 auto;padding:24px 16px 100px;}
 .vehicle-card:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(0,0,0,.4);}
 .vehicle-card.vendido{opacity:.45;filter:grayscale(.6);}
 .vehicle-card.vendido:hover{opacity:.6;transform:none;box-shadow:none;}
+.sync-bar{position:fixed;top:64px;left:0;right:0;z-index:99;padding:6px 16px;font-size:12px;display:flex;align-items:center;gap:8px;justify-content:center;transition:all .3s;}
+.sync-bar.syncing{background:rgba(74,158,255,.12);color:var(--blue);border-bottom:1px solid rgba(74,158,255,.2);}
+.sync-bar.synced{background:rgba(46,204,113,.1);color:var(--green);border-bottom:1px solid rgba(46,204,113,.2);}
+.sync-bar.error{background:rgba(232,57,77,.12);color:var(--red);border-bottom:1px solid rgba(232,57,77,.2);}
+.sync-bar.hidden{display:none;}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:currentColor;animation:pulse 1.2s infinite;}
 .card-header{padding:13px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none;}
 .plate-badge{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;background:var(--surface2);border:2px solid var(--border);border-radius:6px;padding:4px 10px;min-width:90px;text-align:center;flex-shrink:0;}
 .vehicle-info{flex:1;min-width:0;}
@@ -294,7 +303,8 @@ textarea:focus{border-color:var(--accent);}
     </div>
   </header>
 
-  <main>
+  <div class="sync-bar hidden" id="syncBar"><div class="sync-dot"></div><span id="syncMsg"></span></div>
+<main>
     <!-- NAV TABS (admin only) -->
     <div class="nav-tabs admin-only" id="navTabs">
       <div class="nav-tab active" onclick="showTab('fleet')">🚗 Flota</div>
@@ -675,7 +685,7 @@ function doLogout() {
   document.getElementById('loginPass').value = '';
 }
 
-function startApp() {
+async function startApp() {
   document.getElementById('loginPage').style.display = 'none';
   document.getElementById('appPage').style.display   = 'block';
 
@@ -694,7 +704,9 @@ function startApp() {
 
   // Show fleet tab always
   showTab('fleet');
+  await loadVehiclesFromFirestore();
   renderVehicles();
+  subscribeVehicles(); // real-time updates
   dailyCheck();
 }
 
@@ -809,9 +821,61 @@ function showTab(tab) {
 // ═══════════════════════════════════════════════════════════
 // VEHICLE DATA
 // ═══════════════════════════════════════════════════════════
-let vehicles = JSON.parse(localStorage.getItem('vehialert_v2') || '[]');
+// ── FIREBASE CONFIG ──────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyB_36_CXD-Wg_2c8htAGPTgWs_-8p9Icmc",
+  authDomain: "belmar-vehiculos.firebaseapp.com",
+  projectId: "belmar-vehiculos",
+  storageBucket: "belmar-vehiculos.firebasestorage.app",
+  messagingSenderId: "1044601004735",
+  appId: "1:1044601004735:web:975f91818442256ea25c0a"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const vehiclesCol = db.collection('vehicles');
+
+let vehicles = [];
 let settings = JSON.parse(localStorage.getItem('vehialert_settings') || '{}');
 let editingId = null;
+let _unsubscribe = null; // Firestore real-time listener
+
+function setSyncBar(state, msg) {
+  const bar = document.getElementById('syncBar');
+  const txt = document.getElementById('syncMsg');
+  if (!bar) return;
+  bar.className = 'sync-bar ' + state;
+  txt.textContent = msg;
+  if (state === 'synced') setTimeout(() => bar.classList.add('hidden'), 2500);
+}
+
+// Load all vehicles from Firestore once
+async function loadVehiclesFromFirestore() {
+  setSyncBar('syncing', 'Sincronizando datos...');
+  try {
+    const snap = await vehiclesCol.orderBy('matricula').get();
+    vehicles = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+    setSyncBar('synced', '✓ Datos sincronizados');
+    return true;
+  } catch(e) {
+    console.error('Firestore load error:', e);
+    // Fallback to localStorage if offline
+    vehicles = JSON.parse(localStorage.getItem('vehialert_v2') || '[]');
+    setSyncBar('error', '⚠ Sin conexión — mostrando datos locales');
+    return false;
+  }
+}
+
+// Subscribe to real-time updates
+function subscribeVehicles() {
+  if (_unsubscribe) _unsubscribe();
+  _unsubscribe = vehiclesCol.orderBy('matricula').onSnapshot(snap => {
+    vehicles = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+    localStorage.setItem('vehialert_v2', JSON.stringify(vehicles)); // offline cache
+    renderVehicles();
+  }, err => {
+    console.error('Snapshot error:', err);
+  });
+}
 
 const DOCS = [
   { key:'soa', label:'SOA' },
@@ -819,7 +883,39 @@ const DOCS = [
   { key:'itv', label:'ITV' },
 ];
 
-function saveVehicles() { localStorage.setItem('vehialert_v2', JSON.stringify(vehicles)); }
+async function saveVehicleToFirestore(data, id) {
+  const docData = { ...data };
+  delete docData.id;
+  try {
+    if (id) {
+      await vehiclesCol.doc(id).set(docData);
+    } else {
+      const ref = await vehiclesCol.add(docData);
+      return ref.id;
+    }
+    return id;
+  } catch(e) {
+    console.error('Firestore save error:', e);
+    showToast('Error al guardar en la nube', 'error');
+    return null;
+  }
+}
+
+async function deleteVehicleFromFirestore(id) {
+  try {
+    await vehiclesCol.doc(id).delete();
+    return true;
+  } catch(e) {
+    console.error('Firestore delete error:', e);
+    showToast('Error al eliminar en la nube', 'error');
+    return false;
+  }
+}
+
+function saveVehicles() {
+  // Legacy: kept for Excel import batch — handled separately
+  localStorage.setItem('vehialert_v2', JSON.stringify(vehicles));
+}
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
 function daysUntil(ds) {
@@ -1074,7 +1170,7 @@ function clearVehicleForm() {
   setToggle('tEmail',true);setToggle('tWhatsapp',true);
 }
 
-function saveVehicle() {
+async function saveVehicle() {
   if (!isAdmin()) return;
   const matricula=gVal('fMatricula').toUpperCase();
   if(!matricula){showToast('La matrícula es obligatoria','error');return;}
@@ -1090,22 +1186,23 @@ function saveVehicle() {
     notifEmail:document.getElementById('tEmail').classList.contains('on'),
     notifWa:document.getElementById('tWhatsapp').classList.contains('on'),
   };
+  setSyncBar('syncing', 'Guardando...');
   if(editingId){
-    const idx=vehicles.findIndex(v=>v.id===editingId);
-    vehicles[idx]={...vehicles[idx],...data};
+    await saveVehicleToFirestore(data, editingId);
     showToast('✅ Vehículo actualizado','success');
   } else {
-    data.id=uid(); vehicles.push(data);
+    await saveVehicleToFirestore(data, null);
     showToast('✅ Vehículo registrado','success');
   }
-  saveVehicles();closeModal('vehicleModal');renderVehicles();
+  closeModal('vehicleModal');
 }
 
-function deleteVehicle(id) {
+async function deleteVehicle(id) {
   if(!isAdmin()) return;
   if(!confirm('¿Eliminar este vehículo?')) return;
-  vehicles=vehicles.filter(v=>v.id!==id);
-  saveVehicles();renderVehicles();showToast('🗑️ Vehículo eliminado');
+  setSyncBar('syncing', 'Eliminando...');
+  await deleteVehicleFromFirestore(id);
+  showToast('🗑️ Vehículo eliminado');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1200,7 +1297,23 @@ function processXLSX(file){
         if(mode==='replace'){d.id=uid();nv.push(d);added++;}
         else{const ei=nv.findIndex(v=>v.matricula===mat);if(ei>=0){nv[ei]={...d,id:nv[ei].id};updated++;}else{d.id=uid();nv.push(d);added++;}}
       });
-      vehicles=nv;saveVehicles();renderVehicles();
+      // Batch write to Firestore
+      setSyncBar('syncing', 'Subiendo datos a la nube...');
+      const batch = db.batch();
+      // For replace mode: delete all existing docs first
+      if (mode === 'replace') {
+        const existingSnap = await vehiclesCol.get();
+        existingSnap.docs.forEach(doc => batch.delete(doc.ref));
+      }
+      nv.forEach(v => {
+        const docData = { ...v };
+        const docId = docData.id || uid();
+        delete docData.id;
+        const ref = vehiclesCol.doc(docId);
+        batch.set(ref, docData);
+      });
+      await batch.commit();
+      setSyncBar('synced', '✓ Importación completada');
       showImportResult(added,updated,errs,skipped);
     }catch(err){showImportResult(0,0,['Error: '+err.message]);}
   };
@@ -1344,7 +1457,16 @@ if(vehicles.length===0){
     {id:uid(),matricula:'XYZ 5678',tipo:'CHATA',marca:'Ford',modelo:'Focus',anio:'2019',chasis:'9BF789ABCDE000002',motor:'2AZ7654321',empresa:'Empresa Demo S.A.',depto:'Canelones',padron:'654321',registro:'R-78902',poliza:'POL-2024-002',venc_soa:d(-5),venc_pnc:d(25),venc_itv:d(-10),tipoITV:'INTERNACIONAL',estadoITV:'Rechazado',estadoVeh:'EN REPARACION',email:'flota@empresa.com',phone:'+59899000002',notifEmail:true,notifWa:true},
     {id:uid(),matricula:'MNO 9012',tipo:'CAMION VOLCADORA',marca:'Mercedes-Benz',modelo:'Actros',anio:'2020',chasis:'9BF321GHIJK000003',motor:'3GD9876543',empresa:'Transporte Sur Ltda.',depto:'Maldonado',padron:'789012',registro:'R-78903',poliza:'POL-2024-003',venc_soa:d(60),venc_pnc:d(120),venc_itv:d(200),tipoITV:'NACIONAL',estadoITV:'Aprobado',estadoVeh:'ACTIVO',email:'admin@transporte.com',phone:'+59899000003',notifEmail:true,notifWa:true},
   ];
-  saveVehicles();
+  // Write demo data to Firestore
+  const batch = db.batch();
+  vehicles.forEach(v => {
+    const docData = { ...v };
+    const docId = docData.id;
+    delete docData.id;
+    batch.set(vehiclesCol.doc(docId), docData);
+  });
+  batch.commit().catch(e => console.log('Demo data write skipped:', e));
+  saveVehicles(); // local cache
 }
 
 // Initialize after DOM is ready
