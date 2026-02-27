@@ -38,7 +38,7 @@ header{background:var(--surface);border-bottom:1px solid var(--border);padding:0
 main{max-width:1000px;margin:0 auto;padding:24px 16px 100px;}
 
 /* ── STATS ── */
-.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}
+.stats-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:24px;}@media(min-width:640px){.stats-bar{grid-template-columns:repeat(3,1fr);}}@media(min-width:900px){.stats-bar{grid-template-columns:repeat(9,1fr);}}
 .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;text-align:center;}
 .stat-card .num{font-family:'Bebas Neue',sans-serif;font-size:34px;line-height:1;}
 .stat-card .label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:4px;}
@@ -326,10 +326,16 @@ textarea:focus{border-color:var(--accent);}
       </div>
 
       <div class="stats-bar">
-        <div class="stat-card total"><div class="num" id="statTotal">0</div><div class="label">Total</div></div>
+        <div class="stat-card total"><div class="num" id="statTotal">0</div><div class="label">Activos</div></div>
         <div class="stat-card ok"><div class="num" id="statOk">0</div><div class="label">Al día</div></div>
-        <div class="stat-card warn"><div class="num" id="statWarn">0</div><div class="label">Por vencer</div></div>
-        <div class="stat-card danger"><div class="num" id="statDanger">0</div><div class="label">Vencidos</div></div>
+        <div class="stat-card warn"><div class="num" id="statWarnSoa">0</div><div class="label">⚠ SOA</div></div>
+        <div class="stat-card warn"><div class="num" id="statWarnItv">0</div><div class="label">⚠ ITV</div></div>
+        <div class="stat-card warn"><div class="num" id="statWarnPnc">0</div><div class="label">⚠ PNC</div></div>
+        <div class="stat-card danger"><div class="num" id="statDangerSoa">0</div><div class="label">✖ SOA</div></div>
+        <div class="stat-card danger"><div class="num" id="statDangerItv">0</div><div class="label">✖ ITV</div></div>
+        <div class="stat-card danger"><div class="num" id="statDangerPnc">0</div><div class="label">✖ PNC</div></div>
+        <div class="stat-card" style="--num-color:var(--muted)"><div class="num" id="statInactivo" style="color:var(--muted)">0</div><div class="label">Inactivos</div></div>
+        <div class="stat-card" style="--num-color:#4a5168"><div class="num" id="statVendido" style="color:#4a5168">0</div><div class="label">Vendidos</div></div>
       </div>
 
       <div class="section-title">Flota de Vehículos</div>
@@ -1245,15 +1251,42 @@ function renderCard(v) {
 function toggleCard(id) { document.getElementById('card-'+id).classList.toggle('open'); }
 
 function updateStats() {
-  let ok=0,warn=0,danger=0;
+  let activo=0, inactivo=0, vendido=0;
+  let warnSoa=0, warnItv=0, warnPnc=0;
+  let dangerSoa=0, dangerItv=0, dangerPnc=0;
+  let okCount=0;
   vehicles.forEach(v=>{
-    if(v.estadoVeh==='VENDIDO') return;
-    const s=getStatus(v);if(s==='danger')danger++;else if(s==='warn')warn++;else ok++;
+    if(v.estadoVeh==='VENDIDO'){ vendido++; return; }
+    if(v.estadoVeh==='INACTIVO'||v.estadoVeh==='BAJA'||v.estadoVeh==='EN REPARACION'){ inactivo++; return; }
+    activo++;
+    // Per-doc status for active vehicles
+    const prorrogaInfo = itvNacionalProrroga(v);
+    const docStatus = (key) => {
+      const date = v['venc_' + key];
+      if (!date) return 'ok';
+      const days = daysUntil(date);
+      if (key === 'itv' && prorrogaInfo && prorrogaInfo.active) return 'warn';
+      return days < 0 ? 'danger' : days <= 30 ? 'warn' : 'ok';
+    };
+    const ss = docStatus('soa');
+    const si = docStatus('itv');
+    const sp = docStatus('pnc');
+    if(ss==='warn') warnSoa++; else if(ss==='danger') dangerSoa++;
+    if(si==='warn') warnItv++; else if(si==='danger') dangerItv++;
+    if(sp==='warn') warnPnc++; else if(sp==='danger') dangerPnc++;
+    // Al día: all three are ok
+    if(ss==='ok' && si==='ok' && sp==='ok') okCount++;
   });
-  document.getElementById('statTotal').textContent=vehicles.length;
-  document.getElementById('statOk').textContent=ok;
-  document.getElementById('statWarn').textContent=warn;
-  document.getElementById('statDanger').textContent=danger;
+  document.getElementById('statTotal').textContent    = activo;
+  document.getElementById('statOk').textContent       = okCount;
+  document.getElementById('statWarnSoa').textContent  = warnSoa;
+  document.getElementById('statWarnItv').textContent  = warnItv;
+  document.getElementById('statWarnPnc').textContent  = warnPnc;
+  document.getElementById('statDangerSoa').textContent= dangerSoa;
+  document.getElementById('statDangerItv').textContent= dangerItv;
+  document.getElementById('statDangerPnc').textContent= dangerPnc;
+  document.getElementById('statInactivo').textContent = inactivo;
+  document.getElementById('statVendido').textContent  = vendido;
 }
 
 function updateAlerts() {
