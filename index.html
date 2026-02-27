@@ -628,7 +628,7 @@ textarea:focus{border-color:var(--accent);}
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
 // ══════════════════════════════════════════════════════════
 // FIREBASE — imported as ES module (no CDN script tag needed)
@@ -1700,6 +1700,13 @@ async function saveNewPassword() {
 
 
 // Expose functions to global scope (required for onclick handlers with type="module")
+window.add = typeof add !== "undefined" ? add : undefined;
+window.click = typeof click !== "undefined" ? click : undefined;
+window.handleDrop = typeof handleDrop !== "undefined" ? handleDrop : undefined;
+window.handleFileSelect = typeof handleFileSelect !== "undefined" ? handleFileSelect : undefined;
+window.preventDefault = typeof preventDefault !== "undefined" ? preventDefault : undefined;
+window.remove = typeof remove !== "undefined" ? remove : undefined;
+window.renderVehicles = typeof renderVehicles !== "undefined" ? renderVehicles : undefined;
 window.checkAndNotify = typeof checkAndNotify !== "undefined" ? checkAndNotify : undefined;
 window.closeModal = typeof closeModal !== "undefined" ? closeModal : undefined;
 window.confirmDeleteUser = typeof confirmDeleteUser !== "undefined" ? confirmDeleteUser : undefined;
