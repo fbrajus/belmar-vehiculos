@@ -1597,26 +1597,7 @@ function dailyCheck(){
 }
 
 // ═══════════════════════════════════════════════════════════
-// DEMO DATA & INIT
-// ═══════════════════════════════════════════════════════════
-if(vehicles.length===0){
-  const d=n=>new Date(Date.now()+n*86400000).toISOString().split('T')[0];
-  vehicles=[
-    {id:uid(),matricula:'ABC 1234',tipo:'CAMION',marca:'Toyota',modelo:'Hilux',anio:'2021',chasis:'9BF456XYZWV000001',motor:'1GR1234567',empresa:'Empresa Demo S.A.',depto:'Montevideo',padron:'123456',registro:'R-78901',poliza:'POL-2024-001',venc_soa:d(15),venc_pnc:d(45),venc_itv:d(90),tipoITV:'NACIONAL',estadoITV:'Aprobado',estadoVeh:'ACTIVO',email:'flota@empresa.com',phone:'+59899000001',notifEmail:true,notifWa:true},
-    {id:uid(),matricula:'XYZ 5678',tipo:'CHATA',marca:'Ford',modelo:'Focus',anio:'2019',chasis:'9BF789ABCDE000002',motor:'2AZ7654321',empresa:'Empresa Demo S.A.',depto:'Canelones',padron:'654321',registro:'R-78902',poliza:'POL-2024-002',venc_soa:d(-5),venc_pnc:d(25),venc_itv:d(-10),tipoITV:'INTERNACIONAL',estadoITV:'Rechazado',estadoVeh:'EN REPARACION',email:'flota@empresa.com',phone:'+59899000002',notifEmail:true,notifWa:true},
-    {id:uid(),matricula:'MNO 9012',tipo:'CAMION VOLCADORA',marca:'Mercedes-Benz',modelo:'Actros',anio:'2020',chasis:'9BF321GHIJK000003',motor:'3GD9876543',empresa:'Transporte Sur Ltda.',depto:'Maldonado',padron:'789012',registro:'R-78903',poliza:'POL-2024-003',venc_soa:d(60),venc_pnc:d(120),venc_itv:d(200),tipoITV:'NACIONAL',estadoITV:'Aprobado',estadoVeh:'ACTIVO',email:'admin@transporte.com',phone:'+59899000003',notifEmail:true,notifWa:true},
-  ];
-  // Write demo data to Firestore
-  const batch = _batch();
-  vehicles.forEach(v => {
-    const docData = { ...v };
-    const docId = docData.id;
-    delete docData.id;
-    batch.set(_docRef(vehiclesCol, docId), docData);
-  });
-  batch.commit().catch(e => console.log('Demo data write skipped:', e));
-  saveVehicles(); // local cache
-}
+
 
 // Initialize after DOM is ready — use Firebase Auth state
 document.addEventListener('DOMContentLoaded', function() {
