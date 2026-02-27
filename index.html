@@ -1699,6 +1699,34 @@ async function saveNewPassword() {
 }
 
 
+// Expose functions to global scope (required for onclick handlers with type="module")
+window.checkAndNotify = typeof checkAndNotify !== "undefined" ? checkAndNotify : undefined;
+window.closeModal = typeof closeModal !== "undefined" ? closeModal : undefined;
+window.confirmDeleteUser = typeof confirmDeleteUser !== "undefined" ? confirmDeleteUser : undefined;
+window.deleteVehicle = typeof deleteVehicle !== "undefined" ? deleteVehicle : undefined;
+window.doLogin = typeof doLogin !== "undefined" ? doLogin : undefined;
+window.doLogout = typeof doLogout !== "undefined" ? doLogout : undefined;
+window.downloadTemplate = typeof downloadTemplate !== "undefined" ? downloadTemplate : undefined;
+window.exportExcel = typeof exportExcel !== "undefined" ? exportExcel : undefined;
+window.openAddModal = typeof openAddModal !== "undefined" ? openAddModal : undefined;
+window.openChangePassModal = typeof openChangePassModal !== "undefined" ? openChangePassModal : undefined;
+window.openEditModal = typeof openEditModal !== "undefined" ? openEditModal : undefined;
+window.openEditUserModal = typeof openEditUserModal !== "undefined" ? openEditUserModal : undefined;
+window.openImportModal = typeof openImportModal !== "undefined" ? openImportModal : undefined;
+window.openNewUserModal = typeof openNewUserModal !== "undefined" ? openNewUserModal : undefined;
+window.openSettings = typeof openSettings !== "undefined" ? openSettings : undefined;
+window.resetSession = typeof resetSession !== "undefined" ? resetSession : undefined;
+window.runSetup = typeof runSetup !== "undefined" ? runSetup : undefined;
+window.saveNewPassword = typeof saveNewPassword !== "undefined" ? saveNewPassword : undefined;
+window.saveSettings = typeof saveSettings !== "undefined" ? saveSettings : undefined;
+window.saveUser = typeof saveUser !== "undefined" ? saveUser : undefined;
+window.saveVehicle = typeof saveVehicle !== "undefined" ? saveVehicle : undefined;
+window.sendEmail = typeof sendEmail !== "undefined" ? sendEmail : undefined;
+window.sendWhatsApp = typeof sendWhatsApp !== "undefined" ? sendWhatsApp : undefined;
+window.showTab = typeof showTab !== "undefined" ? showTab : undefined;
+window.toggleCard = typeof toggleCard !== "undefined" ? toggleCard : undefined;
+window.toggleSwitch = typeof toggleSwitch !== "undefined" ? toggleSwitch : undefined;
+
 </script>
 
 </body>
