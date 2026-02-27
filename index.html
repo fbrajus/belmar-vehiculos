@@ -5,10 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Belmar — Control de Vencimientos Vehiculares</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
 <style>
 :root {
   --bg:#0d0f14; --surface:#161a23; --surface2:#1e2330; --border:#2a3045;
@@ -265,7 +262,7 @@ textarea:focus{border-color:var(--accent);}
     <div class="login-error" id="loginError">Usuario o contraseña incorrectos.</div>
     <div class="form-group">
       <label>Usuario</label>
-      <input type="text" id="loginUser" placeholder="Ingresá tu usuario" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
+      <input type="email" id="loginUser" placeholder="Ingresá tu email" autocomplete="email" onkeydown="if(event.key==='Enter')doLogin()">
     </div>
     <div class="form-group">
       <label>Contraseña</label>
@@ -276,7 +273,7 @@ textarea:focus{border-color:var(--accent);}
       <span onclick="resetSession()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline;text-underline-offset:3px;">¿Problemas para ingresar? Restablecer sesión</span>
     </div>
     <div id="loginHint" style="display:none;margin-top:12px;background:rgba(46,204,113,.1);border:1px solid rgba(46,204,113,.3);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--green);text-align:center;line-height:1.6;">
-      ✅ Sesión restablecida.<br>Ingresá con <strong>fbrajus</strong> / <strong>123456</strong>
+      ✅ Sesión cerrada. Intentá ingresar nuevamente.
     </div>
 
   </div>
@@ -353,7 +350,7 @@ textarea:focus{border-color:var(--accent);}
         <table class="user-table">
           <thead>
             <tr>
-              <th>Usuario</th>
+              <th>Email</th>
               <th>Nombre</th>
               <th>Rol</th>
               <th>Estado</th>
@@ -365,8 +362,7 @@ textarea:focus{border-color:var(--accent);}
         </table>
       </div>
       <div style="font-size:12px;color:var(--muted);line-height:1.6;">
-        ℹ️ El usuario <strong style="color:var(--text)">admin</strong> no puede ser eliminado ni desactivado.
-        Los datos se almacenan localmente en este navegador.
+        ℹ️ El usuario administrador principal no puede ser eliminado. Los usuarios y vehículos se almacenan en Firebase (nube).
       </div>
     </div>
   </main>
@@ -575,8 +571,8 @@ textarea:focus{border-color:var(--accent);}
         <input type="text" id="uName" placeholder="Juan Pérez">
       </div>
       <div class="form-group">
-        <label>Usuario (login) *</label>
-        <input type="text" id="uUsername" placeholder="juanperez" autocomplete="off" style="text-transform:lowercase;">
+        <label id="uUsernameLabel">Email *</label>
+        <input type="email" id="uUsername" placeholder="juanperez" autocomplete="off" style="text-transform:lowercase;">
       </div>
       <div class="form-group">
         <label>Contraseña *</label>
@@ -622,116 +618,199 @@ textarea:focus{border-color:var(--accent);}
   </div>
 </div>
 
-<script>
-// ═══════════════════════════════════════════════════════════
-// AUTH & USER MANAGEMENT
-// ═══════════════════════════════════════════════════════════
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script type="module">
+// ══════════════════════════════════════════════════════════
+// FIREBASE — imported as ES module (no CDN script tag needed)
+// ══════════════════════════════════════════════════════════
+import { initializeApp }                        from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getFirestore, collection, doc,
+         getDocs, getDoc, setDoc, addDoc,
+         deleteDoc, onSnapshot, orderBy,
+         query, writeBatch }                    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getAuth, signInWithEmailAndPassword,
+         signOut, onAuthStateChanged,
+         EmailAuthProvider,
+         reauthenticateWithCredential,
+         updatePassword, createUserWithEmail,
+         initializeAuth }                       from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
-const DEFAULT_USERS = [
-  { id:'u0', username:'fbrajus', password:'123456', name:'Administrador', role:'admin', active:true, created:'2025-01-01', mustChangePass:true }
-];
+const firebaseConfig = {
+  apiKey: "AIzaSyB_36_CXD-Wg_2c8htAGPTgWs_-8p9Icmc",
+  authDomain: "belmar-vehiculos.firebaseapp.com",
+  projectId: "belmar-vehiculos",
+  storageBucket: "belmar-vehiculos.firebasestorage.app",
+  messagingSenderId: "1044601004735",
+  appId: "1:1044601004735:web:975f91818442256ea25c0a"
+};
 
-function loadUsers() {
-  let users = JSON.parse(localStorage.getItem('vehialert_users') || 'null');
-  if (!users) return DEFAULT_USERS;
-  // Migración: eliminar usuario 'admin' viejo y asegurar que 'fbrajus' exista
-  users = users.filter(u => u.username !== 'admin');
-  if (!users.find(u => u.username === 'fbrajus')) {
-    users.unshift(DEFAULT_USERS[0]);
-  }
-  localStorage.setItem('vehialert_users', JSON.stringify(users));
-  return users;
+const app         = initializeApp(firebaseConfig);
+const db          = getFirestore(app);
+const auth        = getAuth(app);
+const vehiclesCol = collection(db, 'vehicles');
+const usersCol    = collection(db, 'users');
+
+// Firestore helper wrappers to keep compat-style API in main code
+const _db = {
+  collection: (name) => collection(db, name),
+};
+
+// Patch Firestore calls used in main code to modular API
+async function _getDoc(colRef, id)        { return getDoc(doc(db, colRef.id || colRef.path, id)); }
+async function _setDoc(colRef, id, data)  { return setDoc(doc(db, colRef.id || colRef.path, id), data); }
+async function _setDocMerge(colRef, id, data) { return setDoc(doc(db, colRef.id || colRef.path, id), data, {merge:true}); }
+async function _addDoc(colRef, data)      { return addDoc(colRef, data); }
+async function _deleteDoc(colRef, id)     { return deleteDoc(doc(db, colRef.id || colRef.path, id)); }
+async function _getDocs(colRef)           { return getDocs(colRef); }
+async function _getDocsOrdered(colRef, field) { return getDocs(query(colRef, orderBy(field))); }
+function _batch() {
+  const b = writeBatch(db);
+  return {
+    set:    (ref, data)  => b.set(ref, data),
+    delete: (ref)        => b.delete(ref),
+    commit: ()           => b.commit(),
+    _ref:   (colRef, id) => doc(db, colRef.id || colRef.path, id),
+  };
 }
-function saveUsers(u) { localStorage.setItem('vehialert_users', JSON.stringify(u)); }
+function _docRef(colRef, id) { return doc(db, colRef.id || colRef.path, id); }
 
-let appUsers = loadUsers();
-let currentUser = null; // { id, username, name, role }
+// Create Firebase Auth user via REST API
+async function _createFirebaseUser(email, password) {
+  const apiKey = "AIzaSyB_36_CXD-Wg_2c8htAGPTgWs_-8p9Icmc";
+  const res = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
+    { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({email, password, returnSecureToken:true}) }
+  );
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.localId;
+}
 
-function doLogin() {
-  const uname = document.getElementById('loginUser').value.trim().toLowerCase();
+// ═══════════════════════════════════════════════════════════
+// AUTH & USER MANAGEMENT — Firebase Auth + Firestore
+// ═══════════════════════════════════════════════════════════
+
+// [auth and usersCol initialized below with Firebase]
+
+// Bootstrap: ensure admin profile exists in Firestore
+const ADMIN_UID = 'e8H5i8LpfPWPMyXLfOlj8YnDpZY2';
+async function bootstrapAdmin() {
+  try {
+    const ref  = _docRef(usersCol, ADMIN_UID);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      await ref.set({ name:'Administrador', email:'', role:'admin', active:true, mustChangePass:true, created: new Date().toISOString().split('T')[0] });
+    }
+  } catch(e) { console.log('Bootstrap skipped:', e.message); }
+}
+
+let appUsers    = [];
+let currentUser = null;
+
+async function loadUsersFromFirestore() {
+  try {
+    const snap = await _getDocs(usersCol);
+    appUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch(e) { console.error('loadUsers error:', e); appUsers = []; }
+}
+
+async function doLogin() {
+  const email = document.getElementById('loginUser').value.trim();
   const pass  = document.getElementById('loginPass').value;
   const err   = document.getElementById('loginError');
-  const user  = appUsers.find(u => u.username === uname && u.password === pass && u.active);
-  if (!user) { err.classList.add('show'); return; }
+  const btn   = document.querySelector('#loginPage .btn-primary');
   err.classList.remove('show');
-  currentUser = { id: user.id, username: user.username, name: user.name, role: user.role };
-  sessionStorage.setItem('vehialert_session', JSON.stringify(currentUser));
-  if (user.mustChangePass) { openChangePassModal(true); return; }
-  startApp();
+  if (btn) btn.textContent = 'Ingresando...';
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email, pass);
+    const uid  = cred.user.uid;
+    await bootstrapAdmin();
+    const snap = await _getDoc(usersCol, uid);
+    if (!snap.exists) { await signOut(auth); throw new Error('Perfil no encontrado. Contactá al administrador.'); }
+    const profile = snap.data();
+    if (profile.active === false) { await signOut(auth); throw new Error('Usuario inactivo. Contactá al administrador.'); }
+    currentUser = { uid, email: cred.user.email, name: profile.name || email, role: profile.role || 'user', mustChangePass: profile.mustChangePass || false };
+    if (currentUser.mustChangePass) { await startApp(); openChangePassModal(true); return; }
+    await startApp();
+  } catch(e) {
+    const code = e.code || '';
+    err.textContent = (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found') || code.includes('invalid-email'))
+      ? 'Email o contraseña incorrectos.'
+      : (e.message || 'Error al ingresar.');
+    err.classList.add('show');
+    if (btn) btn.textContent = 'Ingresar →';
+  }
 }
 
-function resetSession() {
-  if (!confirm('¿Restablecer sesión? Esto eliminará los datos de usuario guardados en este navegador (los vehículos NO se borran). Luego podrás ingresar con fbrajus / 123456.')) return;
-  localStorage.removeItem('vehialert_users');
-  sessionStorage.removeItem('vehialert_session');
-  appUsers = loadUsers();
-  document.getElementById('loginUser').value = '';
-  document.getElementById('loginPass').value = '';
-  document.getElementById('loginError').classList.remove('show');
-  showLoginHint();
-}
-
-function showLoginHint() {
-  const hint = document.getElementById('loginHint');
-  if (hint) { hint.style.display = 'block'; }
-}
-
-function doLogout() {
+async function doLogout() {
+  await signOut(auth).catch(()=>{});
   currentUser = null;
-  sessionStorage.removeItem('vehialert_session');
+  if (_unsubscribe) { _unsubscribe(); _unsubscribe = null; }
   document.getElementById('appPage').style.display = 'none';
   document.getElementById('loginPage').style.display = 'flex';
   document.getElementById('loginUser').value = '';
   document.getElementById('loginPass').value = '';
 }
 
+function resetSession() {
+  signOut(auth).catch(()=>{});
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+  document.getElementById('loginError').classList.remove('show');
+  const hint = document.getElementById('loginHint');
+  if (hint) hint.style.display = 'block';
+}
+
+function showLoginHint() {
+  const hint = document.getElementById('loginHint');
+  if (hint) hint.style.display = 'block';
+}
+
 async function startApp() {
   document.getElementById('loginPage').style.display = 'none';
   document.getElementById('appPage').style.display   = 'block';
 
-  // Update chip
-  document.getElementById('chipName').textContent = currentUser.name || currentUser.username;
+  document.getElementById('chipName').textContent = currentUser.name || currentUser.email;
   document.getElementById('chipRole').textContent = currentUser.role === 'admin' ? '· Admin' : '· Usuario';
   document.getElementById('roleDot').className = 'role-dot ' + (currentUser.role === 'admin' ? 'role-admin' : 'role-user');
 
-  const isAdmin = currentUser.role === 'admin';
+  const isAdminUser = currentUser.role === 'admin';
+  document.querySelectorAll('.admin-only').forEach(el => { el.style.display = isAdminUser ? '' : 'none'; });
+  document.getElementById('readonlyBanner').style.display = isAdminUser ? 'none' : 'flex';
 
-  // Show/hide admin-only elements
-  document.querySelectorAll('.admin-only').forEach(el => {
-    el.style.display = isAdmin ? '' : 'none';
-  });
-  document.getElementById('readonlyBanner').style.display = isAdmin ? 'none' : 'flex';
-
-  // Show fleet tab always
   showTab('fleet');
   await loadVehiclesFromFirestore();
   renderVehicles();
-  subscribeVehicles(); // real-time updates
+  subscribeVehicles();
   dailyCheck();
 }
 
 function isAdmin() { return currentUser && currentUser.role === 'admin'; }
 
 // ═══════════════════════════════════════════════════════════
-// USER TABLE
+// USER TABLE — Firestore
 // ═══════════════════════════════════════════════════════════
 let editingUserId = null;
 
-function renderUserTable() {
-  appUsers = loadUsers();
+async function renderUserTable() {
+  await loadUsersFromFirestore();
   const tbody = document.getElementById('userTableBody');
-  tbody.innerHTML = appUsers.map(u => `
+  if (!tbody) return;
+  tbody.innerHTML = appUsers.length === 0
+    ? `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;">No hay usuarios cargados</td></tr>`
+    : appUsers.map(u => `
     <tr>
-      <td><strong>${u.username}</strong></td>
-      <td>${u.name || '—'}</td>
+      <td style="font-size:12px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;">${u.email||'—'}</td>
+      <td><strong>${u.name||'—'}</strong></td>
       <td><span class="badge ${u.role==='admin'?'badge-admin':'badge-user2'}">${u.role==='admin'?'Admin':'Usuario'}</span></td>
-      <td><span class="badge ${u.active?'badge-active':'badge-inactive'}">${u.active?'Activo':'Inactivo'}</span></td>
+      <td><span class="badge ${u.active!==false?'badge-active':'badge-inactive'}">${u.active!==false?'Activo':'Inactivo'}</span></td>
       <td style="color:var(--muted);font-size:12px;">${u.created||'—'}</td>
       <td style="text-align:center;">
         <div style="display:flex;gap:6px;justify-content:center;">
           <button class="btn btn-secondary btn-sm" onclick="openEditUserModal('${u.id}')">✏️</button>
-          ${u.username !== 'admin'
-            ? `<button class="btn btn-danger btn-sm" onclick="confirmDeleteUser('${u.id}','${u.username}')">🗑️</button>`
+          ${u.id !== ADMIN_UID
+            ? `<button class="btn btn-danger btn-sm" onclick="confirmDeleteUser('${u.id}','${u.email||u.name}')">🗑️</button>`
             : `<button class="btn btn-secondary btn-sm" disabled title="No eliminable">🔒</button>`}
         </div>
       </td>
@@ -745,65 +824,96 @@ function openNewUserModal() {
   setVal('uRole','user'); setVal('uActive','1');
   document.getElementById('uError').style.display = 'none';
   document.getElementById('uUsername').removeAttribute('disabled');
+  // Show email hint
+  document.getElementById('uUsernameLabel').textContent = 'Email *';
+  document.getElementById('uUsername').placeholder = 'correo@ejemplo.com';
+  document.getElementById('uUsername').type = 'email';
   openModal('userModal');
 }
 
 function openEditUserModal(id) {
-  appUsers = loadUsers();
   const u = appUsers.find(x => x.id === id);
   if (!u) return;
   editingUserId = id;
   document.getElementById('userModalTitle').textContent = 'Editar Usuario';
-  setVal('uName', u.name); setVal('uUsername', u.username); setVal('uPassword', u.password);
-  setVal('uRole', u.role); setVal('uActive', u.active ? '1' : '0');
+  setVal('uName', u.name);
+  setVal('uUsername', u.email || '');
+  setVal('uPassword', '');
+  setVal('uRole', u.role);
+  setVal('uActive', u.active !== false ? '1' : '0');
   document.getElementById('uError').style.display = 'none';
-  // Lock username for admin
-  if (u.username === 'admin') document.getElementById('uUsername').setAttribute('disabled','disabled');
-  else document.getElementById('uUsername').removeAttribute('disabled');
+  document.getElementById('uUsernameLabel').textContent = 'Email';
+  document.getElementById('uUsername').type = 'email';
+  if (u.id === ADMIN_UID) {
+    document.getElementById('uUsername').setAttribute('disabled','disabled');
+  } else {
+    document.getElementById('uUsername').removeAttribute('disabled');
+  }
   openModal('userModal');
 }
 
-function saveUser() {
-  appUsers = loadUsers();
+async function saveUser() {
   const name     = gVal('uName');
-  const username = gVal('uUsername').toLowerCase();
+  const email    = gVal('uUsername').toLowerCase();
   const password = gVal('uPassword');
   const role     = gVal('uRole');
   const active   = document.getElementById('uActive').value === '1';
   const errEl    = document.getElementById('uError');
+  errEl.style.display = 'none';
 
-  if (!username) { errEl.textContent = 'El nombre de usuario es obligatorio.'; errEl.style.display='block'; return; }
-  if (!password || password.length < 4) { errEl.textContent = 'La contraseña debe tener al menos 4 caracteres.'; errEl.style.display='block'; return; }
+  if (!email) { errEl.textContent = 'El email es obligatorio.'; errEl.style.display='block'; return; }
 
-  if (editingUserId) {
-    const idx = appUsers.findIndex(u => u.id === editingUserId);
-    const existing = appUsers.find(u => u.username === username && u.id !== editingUserId);
-    if (existing) { errEl.textContent = 'Ese nombre de usuario ya existe.'; errEl.style.display='block'; return; }
-    appUsers[idx] = { ...appUsers[idx], name, username, password, role, active };
-    showToast('✅ Usuario actualizado', 'success');
-  } else {
-    if (appUsers.find(u => u.username === username)) { errEl.textContent = 'Ese nombre de usuario ya existe.'; errEl.style.display='block'; return; }
-    appUsers.push({ id: uid(), name, username, password, role, active, created: new Date().toISOString().split('T')[0] });
-    showToast('✅ Usuario creado', 'success');
+  setSyncBar('syncing', 'Guardando usuario...');
+
+  try {
+    if (editingUserId) {
+      // Update profile in Firestore only (password change via Firebase Console or changePass modal)
+      const updateData = { name, role, active };
+      if (email && editingUserId !== ADMIN_UID) updateData.email = email;
+      await setDoc(_docRef(usersCol, editingUserId), updateData, { merge: true });
+      // If new password provided and not admin uid, update via re-auth would be needed
+      // For simplicity we show a note
+      if (password && password.length >= 6) {
+        errEl.textContent = 'Para cambiar la contraseña, el usuario debe usar el botón 🔑 en su sesión.';
+        errEl.style.color = 'var(--yellow)';
+        errEl.style.display = 'block';
+      }
+      showToast('✅ Usuario actualizado', 'success');
+    } else {
+      // Create new user in Firebase Auth + Firestore
+      if (!password || password.length < 6) { errEl.textContent = 'La contraseña debe tener al menos 6 caracteres.'; errEl.style.display='block'; setSyncBar('hidden',''); return; }
+      // Create user via REST API (avoids secondary app)
+      const newUid = await _createFirebaseUser(email, password);
+      await setDoc(_docRef(usersCol, newUid), { name, email, role, active, mustChangePass: false, created: new Date().toISOString().split('T')[0] });
+      showToast('✅ Usuario creado', 'success');
+    }
+    await loadUsersFromFirestore();
+    setSyncBar('synced', '✓ Listo');
+    closeModal('userModal');
+    renderUserTable();
+  } catch(e) {
+    errEl.textContent = e.code === 'auth/email-already-in-use' ? 'Ese email ya está registrado.' : (e.message || 'Error al guardar.');
+    errEl.style.color = 'var(--red)';
+    errEl.style.display = 'block';
+    setSyncBar('hidden','');
   }
-
-  saveUsers(appUsers);
-  closeModal('userModal');
-  renderUserTable();
 }
 
-function confirmDeleteUser(id, username) {
-  document.getElementById('confirmText').textContent = `¿Eliminar el usuario "${username}"? Esta acción no se puede deshacer.`;
+function confirmDeleteUser(id, label) {
+  document.getElementById('confirmText').textContent = `¿Eliminar el usuario "${label}"? Esta acción no se puede deshacer.`;
   document.getElementById('confirmOkBtn').onclick = () => { deleteUser(id); closeModal('confirmModal'); };
   openModal('confirmModal');
 }
 
-function deleteUser(id) {
-  appUsers = loadUsers();
-  appUsers = appUsers.filter(u => u.id !== id);
-  saveUsers(appUsers);
-  renderUserTable();
-  showToast('🗑️ Usuario eliminado');
+async function deleteUser(id) {
+  try {
+    await deleteUserFromFirestore(id);
+    await loadUsersFromFirestore();
+    renderUserTable();
+    showToast('🗑️ Usuario eliminado');
+  } catch(e) {
+    showToast('Error al eliminar: ' + e.message, 'error');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -821,18 +931,7 @@ function showTab(tab) {
 // ═══════════════════════════════════════════════════════════
 // VEHICLE DATA
 // ═══════════════════════════════════════════════════════════
-// ── FIREBASE CONFIG ──────────────────────────────────────────────────────────
-const firebaseConfig = {
-  apiKey: "AIzaSyB_36_CXD-Wg_2c8htAGPTgWs_-8p9Icmc",
-  authDomain: "belmar-vehiculos.firebaseapp.com",
-  projectId: "belmar-vehiculos",
-  storageBucket: "belmar-vehiculos.firebasestorage.app",
-  messagingSenderId: "1044601004735",
-  appId: "1:1044601004735:web:975f91818442256ea25c0a"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-const vehiclesCol = db.collection('vehicles');
+// [Firebase init moved to top of script]
 
 let vehicles = [];
 let settings = JSON.parse(localStorage.getItem('vehialert_settings') || '{}');
@@ -852,7 +951,7 @@ function setSyncBar(state, msg) {
 async function loadVehiclesFromFirestore() {
   setSyncBar('syncing', 'Sincronizando datos...');
   try {
-    const snap = await vehiclesCol.orderBy('matricula').get();
+    const snap = await _getDocsOrdered(vehiclesCol, 'matricula');
     vehicles = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
     setSyncBar('synced', '✓ Datos sincronizados');
     return true;
@@ -868,7 +967,7 @@ async function loadVehiclesFromFirestore() {
 // Subscribe to real-time updates
 function subscribeVehicles() {
   if (_unsubscribe) _unsubscribe();
-  _unsubscribe = vehiclesCol.orderBy('matricula').onSnapshot(snap => {
+  _unsubscribe = onSnapshot(query(vehiclesCol, orderBy('matricula')), snap => {
     vehicles = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
     localStorage.setItem('vehialert_v2', JSON.stringify(vehicles)); // offline cache
     renderVehicles();
@@ -888,9 +987,9 @@ async function saveVehicleToFirestore(data, id) {
   delete docData.id;
   try {
     if (id) {
-      await vehiclesCol.doc(id).set(docData);
+      await _setDoc(vehiclesCol, id, docData);
     } else {
-      const ref = await vehiclesCol.add(docData);
+      const ref = await _addDoc(vehiclesCol, docData);
       return ref.id;
     }
     return id;
@@ -903,7 +1002,7 @@ async function saveVehicleToFirestore(data, id) {
 
 async function deleteVehicleFromFirestore(id) {
   try {
-    await vehiclesCol.doc(id).delete();
+    await _deleteDoc(vehiclesCol, id);
     return true;
   } catch(e) {
     console.error('Firestore delete error:', e);
@@ -937,12 +1036,12 @@ function daysLabel(n) {
   if (n===0) return 'Vence HOY';
   return `${n} día${n!==1?'s':''}`;
 }
-function getDocs(v) {
+function getVehicleDocs(v) {
   return DOCS.map(d => ({ key:d.key, label:d.label, date:v['venc_'+d.key]||null, days:daysUntil(v['venc_'+d.key]) }));
 }
 function getStatus(v) {
   if (v.estadoVeh === 'VENDIDO') return 'ok';
-  const docs = getDocs(v).filter(d=>d.date);
+  const docs = getVehicleDocs(v).filter(d=>d.date);
   if (!docs.length) return 'ok';
   // Check Nacional ITV prorroga: counts as warn (not danger) while prorroga is active
   const prorrogaInfo = itvNacionalProrroga(v);
@@ -1004,7 +1103,7 @@ function itvNacionalProrroga(v) {
 
 function renderCard(v) {
   const isVendido = v.estadoVeh === 'VENDIDO';
-  const docs = getDocs(v);
+  const docs = getVehicleDocs(v);
   const prorrogaInfo = itvNacionalProrroga(v);
   const dotHtml = isVendido ? '' : docs.filter(d=>d.date).map(d => {
     if (d.key === 'itv' && prorrogaInfo && prorrogaInfo.active) {
@@ -1111,7 +1210,7 @@ function updateAlerts() {
   const items=[];
   vehicles.forEach(v=>{
     if (v.estadoVeh === 'VENDIDO') return;
-    getDocs(v).filter(d=>d.date&&d.days!==null&&d.days<=30).forEach(d=>{
+    getVehicleDocs(v).filter(d=>d.date&&d.days!==null&&d.days<=30).forEach(d=>{
       items.push(`<div class="alert-item"><div class="alert-dot"></div>
         <span><strong>${v.matricula}${v.empresa?' · '+v.empresa:''}</strong> — ${d.label}: ${daysLabel(d.days)} (${fmtDate(d.date)})</span></div>`);
     });
@@ -1264,7 +1363,7 @@ function handleDrop(e){
 }
 function processXLSX(file){
   const reader=new FileReader();
-  reader.onload=e=>{
+  reader.onload=async e=>{
     try{
       const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:false});
       const sn=wb.SheetNames.includes('Vehículos')?'Vehículos':wb.SheetNames[0];
@@ -1299,17 +1398,17 @@ function processXLSX(file){
       });
       // Batch write to Firestore
       setSyncBar('syncing', 'Subiendo datos a la nube...');
-      const batch = db.batch();
+      const batch = _batch();
       // For replace mode: delete all existing docs first
       if (mode === 'replace') {
-        const existingSnap = await vehiclesCol.get();
+        const existingSnap = await _getDocs(vehiclesCol);
         existingSnap.docs.forEach(doc => batch.delete(doc.ref));
       }
       nv.forEach(v => {
         const docData = { ...v };
         const docId = docData.id || uid();
         delete docData.id;
-        const ref = vehiclesCol.doc(docId);
+        const ref = _docRef(vehiclesCol, docId);
         batch.set(ref, docData);
       });
       await batch.commit();
@@ -1345,7 +1444,7 @@ function downloadTemplate(){
 // NOTIFICATIONS
 // ═══════════════════════════════════════════════════════════
 function buildAlertMsg(v){
-  const docs=getDocs(v).filter(d=>d.date&&d.days!==null&&d.days<=30);
+  const docs=getVehicleDocs(v).filter(d=>d.date&&d.days!==null&&d.days<=30);
   if(!docs.length) return null;
   let msg=`⚠️ ALERTA DE VENCIMIENTOS\n🚗 Matrícula: ${v.matricula}\n`;
   if(v.empresa) msg+=`🏢 Empresa: ${v.empresa}\n`;
@@ -1369,7 +1468,7 @@ function sendWhatsApp(id){
 }
 function sendEmail(id){
   const v=vehicles.find(x=>x.id===id);
-  const docs=getDocs(v).filter(d=>d.date&&d.days!==null&&d.days<=30);
+  const docs=getVehicleDocs(v).filter(d=>d.date&&d.days!==null&&d.days<=30);
   const subj=`⚠️ VehiAlert: Vencimientos de ${v.matricula}`;
   let body=`Vencimientos próximos:\nMatrícula: ${v.matricula}\n${v.empresa?'Empresa: '+v.empresa+'\n':''}\n`;
   docs.forEach(d=>{body+=`• ${d.label}: ${fmtDate(d.date)} (${daysLabel(d.days)})\n`;});
@@ -1392,7 +1491,7 @@ function checkAndNotify(){
   let sent=0;
   vehicles.forEach(v=>{
     if(v.estadoVeh === 'VENDIDO') return;
-    if(getDocs(v).some(d=>d.date&&d.days!==null&&d.days<=30)){
+    if(getVehicleDocs(v).some(d=>d.date&&d.days!==null&&d.days<=30)){
       if(v.notifWa!==false){sendWhatsApp(v.id);sent++;}
       if(v.notifEmail!==false&&v.email){sendEmail(v.id);sent++;}
     }
@@ -1458,27 +1557,36 @@ if(vehicles.length===0){
     {id:uid(),matricula:'MNO 9012',tipo:'CAMION VOLCADORA',marca:'Mercedes-Benz',modelo:'Actros',anio:'2020',chasis:'9BF321GHIJK000003',motor:'3GD9876543',empresa:'Transporte Sur Ltda.',depto:'Maldonado',padron:'789012',registro:'R-78903',poliza:'POL-2024-003',venc_soa:d(60),venc_pnc:d(120),venc_itv:d(200),tipoITV:'NACIONAL',estadoITV:'Aprobado',estadoVeh:'ACTIVO',email:'admin@transporte.com',phone:'+59899000003',notifEmail:true,notifWa:true},
   ];
   // Write demo data to Firestore
-  const batch = db.batch();
+  const batch = _batch();
   vehicles.forEach(v => {
     const docData = { ...v };
     const docId = docData.id;
     delete docData.id;
-    batch.set(vehiclesCol.doc(docId), docData);
+    batch.set(_docRef(vehiclesCol, docId), docData);
   });
   batch.commit().catch(e => console.log('Demo data write skipped:', e));
   saveVehicles(); // local cache
 }
 
-// Initialize after DOM is ready
+// Initialize after DOM is ready — use Firebase Auth state
 document.addEventListener('DOMContentLoaded', function() {
-  // Check for existing session
-  const savedSession = sessionStorage.getItem('vehialert_session');
-  if(savedSession){
-    try {
-      currentUser = JSON.parse(savedSession);
-      startApp();
-    } catch(e){ sessionStorage.removeItem('vehialert_session'); }
-  }
+  bootstrapAdmin().catch(()=>{});
+  onAuthStateChanged(auth, async (firebaseUser) => {
+    if (firebaseUser && !currentUser) {
+      // Auto-restore session
+      try {
+        const snap = await _getDoc(usersCol, firebaseUser.uid);
+        if (snap.exists && snap.data().active !== false) {
+          const profile = snap.data();
+          currentUser = { uid: firebaseUser.uid, email: firebaseUser.email, name: profile.name || firebaseUser.email, role: profile.role || 'user', mustChangePass: profile.mustChangePass || false };
+          await startApp();
+          if (currentUser.mustChangePass) openChangePassModal(true);
+        } else {
+          await signOut(auth);
+        }
+      } catch(e) { console.error('Auth restore error:', e); }
+    }
+  });
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -1498,20 +1606,13 @@ function openChangePassModal(forced) {
   openModal('changePassModal');
 }
 
-function saveNewPassword() {
+async function saveNewPassword() {
   const oldPass = document.getElementById('cpOld').value;
   const newPass = document.getElementById('cpNew').value;
   const confirm = document.getElementById('cpConfirm').value;
   const errEl   = document.getElementById('cpError');
+  errEl.style.display = 'none';
 
-  appUsers = loadUsers();
-  const uIdx = appUsers.findIndex(u => u.id === currentUser.id);
-  if (uIdx < 0) return;
-
-  if (appUsers[uIdx].password !== oldPass) {
-    errEl.textContent = 'La contraseña actual es incorrecta.';
-    errEl.style.display = 'block'; return;
-  }
   if (newPass.length < 6) {
     errEl.textContent = 'La nueva contraseña debe tener al menos 6 caracteres.';
     errEl.style.display = 'block'; return;
@@ -1525,16 +1626,27 @@ function saveNewPassword() {
     errEl.style.display = 'block'; return;
   }
 
-  appUsers[uIdx].password = newPass;
-  appUsers[uIdx].mustChangePass = false;
-  saveUsers(appUsers);
-  closeModal('changePassModal');
-  showToast('✅ Contraseña actualizada', 'success');
-
-  if (_forcedPassChange) {
-    startApp();
+  try {
+    // Re-authenticate then update password in Firebase Auth
+    const firebaseUser = auth.currentUser;
+    const credential   = EmailAuthProvider.credential(firebaseUser.email, oldPass);
+    await reauthenticateWithCredential(auth.currentUser, credential);
+    await updatePassword(auth.currentUser, newPass);
+    // Clear mustChangePass flag in Firestore
+    await setDoc(_docRef(usersCol, currentUser.uid), { mustChangePass: false }, { merge: true });
+    currentUser.mustChangePass = false;
+    closeModal('changePassModal');
+    showToast('✅ Contraseña actualizada', 'success');
+    if (_forcedPassChange) { /* already in app, nothing to do */ }
+  } catch(e) {
+    const code = e.code || '';
+    errEl.textContent = (code.includes('wrong-password') || code.includes('invalid-credential'))
+      ? 'La contraseña actual es incorrecta.'
+      : (e.message || 'Error al cambiar la contraseña.');
+    errEl.style.display = 'block';
   }
 }
+
 
 </script>
 
